@@ -41,10 +41,12 @@ public class LockAndFetchCandidates implements PollStrategy {
     private final int upperLimit;
     private AtomicBoolean moreExecutionsInDatabase = new AtomicBoolean(false);
 
+    private final boolean enableAsyncHandler;
+
     public LockAndFetchCandidates(Executor executor, TaskRepository taskRepository, SchedulerClient schedulerClient,
                                   int threadpoolSize, StatsRegistry statsRegistry, SchedulerState schedulerState,
                                   ConfigurableLogger failureLogger, TaskResolver taskResolver, Clock clock,
-                                  PollingStrategyConfig pollingStrategyConfig, Runnable triggerCheckForNewExecutions) {
+                                  PollingStrategyConfig pollingStrategyConfig, Runnable triggerCheckForNewExecutions, boolean enableAsyncHandler) {
         this.executor = executor;
         this.taskRepository = taskRepository;
         this.schedulerClient = schedulerClient;
@@ -55,6 +57,7 @@ public class LockAndFetchCandidates implements PollStrategy {
         this.clock = clock;
         this.pollingStrategyConfig = pollingStrategyConfig;
         this.triggerCheckForNewExecutions = triggerCheckForNewExecutions;
+        this.enableAsyncHandler = enableAsyncHandler;
         lowerLimit = pollingStrategyConfig.getLowerLimit(threadpoolSize);
         upperLimit = pollingStrategyConfig.getUpperLimit(threadpoolSize);
     }
@@ -89,7 +92,7 @@ public class LockAndFetchCandidates implements PollStrategy {
             executor.addToQueue(
                 new ExecutePicked(executor, taskRepository, schedulerClient, statsRegistry,
                     taskResolver, schedulerState, failureLogger,
-                    clock, picked),
+                    clock, picked, enableAsyncHandler),
                 () -> {
                     if (moreExecutionsInDatabase.get()
                         && executor.getNumberInQueueOrProcessing() <= lowerLimit) {

@@ -75,6 +75,8 @@ public class SchedulerBuilder {
     protected boolean logStackTrace = LOG_STACK_TRACE_ON_FAILURE;
     private boolean registerShutdownHook = false;
 
+    protected boolean enableAsyncHandler = false;
+
     public SchedulerBuilder(DataSource dataSource, List<Task<?>> knownTasks) {
         this.dataSource = dataSource;
         this.knownTasks.addAll(knownTasks);
@@ -184,6 +186,11 @@ public class SchedulerBuilder {
         return this;
     }
 
+    public SchedulerBuilder enableAsyncHandler() {
+        this.enableAsyncHandler = true;
+        return this;
+    }
+
     public Scheduler build() {
         if (schedulerName == null) {
              schedulerName = new SchedulerName.Hostname();
@@ -209,7 +216,7 @@ public class SchedulerBuilder {
 
         final Scheduler scheduler = new Scheduler(clock, schedulerTaskRepository, clientTaskRepository, taskResolver, executorThreads, candidateExecutorService,
             schedulerName, waiter, heartbeatInterval, enableImmediateExecution, statsRegistry, pollingStrategyConfig,
-            deleteUnresolvedAfter, shutdownMaxWait, logLevel, logStackTrace, startTasks);
+            deleteUnresolvedAfter, shutdownMaxWait, logLevel, logStackTrace, startTasks, enableAsyncHandler);
 
         if (registerShutdownHook) {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

@@ -43,10 +43,12 @@ public class FetchCandidates implements PollStrategy {
     private final int lowerLimit;
     private final int upperLimit;
 
+    private final boolean enableAsyncHandler;
+
     public FetchCandidates(Executor executor, TaskRepository taskRepository, SchedulerClient schedulerClient,
                            int threadpoolSize, StatsRegistry statsRegistry, SchedulerState schedulerState,
                            ConfigurableLogger failureLogger, TaskResolver taskResolver, Clock clock,
-                           PollingStrategyConfig pollingStrategyConfig, Runnable triggerCheckForNewExecutions) {
+                           PollingStrategyConfig pollingStrategyConfig, Runnable triggerCheckForNewExecutions, boolean enableAsyncHandler) {
         this.executor = executor;
         this.taskRepository = taskRepository;
         this.schedulerClient = schedulerClient;
@@ -57,6 +59,7 @@ public class FetchCandidates implements PollStrategy {
         this.clock = clock;
         this.pollingStrategyConfig = pollingStrategyConfig;
         this.triggerCheckForNewExecutions = triggerCheckForNewExecutions;
+        this.enableAsyncHandler = enableAsyncHandler;
         lowerLimit = pollingStrategyConfig.getLowerLimit(threadpoolSize);
         //FIXLATER: this is not "upper limit", but rather nr of executions to get. those already in queue will become stale
         upperLimit = pollingStrategyConfig.getUpperLimit(threadpoolSize);
@@ -84,7 +87,7 @@ public class FetchCandidates implements PollStrategy {
                     final Optional<Execution> candidate = new PickDue(e, newDueBatch).call();
                     candidate.ifPresent(picked -> new ExecutePicked(executor, taskRepository, schedulerClient, statsRegistry,
                         taskResolver, schedulerState, failureLogger,
-                        clock, picked).run());
+                        clock, picked, enableAsyncHandler).run());
                 },
                 () -> {
                     newDueBatch.oneExecutionDone(triggerCheckForNewExecutions::run);

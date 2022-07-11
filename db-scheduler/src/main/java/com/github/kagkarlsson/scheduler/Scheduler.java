@@ -70,9 +70,18 @@ public class Scheduler implements SchedulerClient {
     final SettableSchedulerState schedulerState = new SettableSchedulerState();
     final ConfigurableLogger failureLogger;
 
+    final boolean enableAsyncHandler;
+
     protected Scheduler(Clock clock, TaskRepository schedulerTaskRepository, TaskRepository clientTaskRepository, TaskResolver taskResolver, int threadpoolSize, ExecutorService executorService, SchedulerName schedulerName,
                         Waiter executeDueWaiter, Duration heartbeatInterval, boolean enableImmediateExecution, StatsRegistry statsRegistry, PollingStrategyConfig pollingStrategyConfig, Duration deleteUnresolvedAfter, Duration shutdownMaxWait,
                         LogLevel logLevel, boolean logStackTrace, List<OnStartup> onStartup) {
+        this(clock, schedulerTaskRepository, clientTaskRepository, taskResolver, threadpoolSize, executorService,
+            schedulerName, executeDueWaiter, heartbeatInterval, enableImmediateExecution, statsRegistry, pollingStrategyConfig,
+            deleteUnresolvedAfter, shutdownMaxWait, logLevel, logStackTrace, onStartup, false);
+    }
+    protected Scheduler(Clock clock, TaskRepository schedulerTaskRepository, TaskRepository clientTaskRepository, TaskResolver taskResolver, int threadpoolSize, ExecutorService executorService, SchedulerName schedulerName,
+                        Waiter executeDueWaiter, Duration heartbeatInterval, boolean enableImmediateExecution, StatsRegistry statsRegistry, PollingStrategyConfig pollingStrategyConfig, Duration deleteUnresolvedAfter, Duration shutdownMaxWait,
+                        LogLevel logLevel, boolean logStackTrace, List<OnStartup> onStartup, boolean enableAsyncHandler) {
         this.clock = clock;
         this.schedulerTaskRepository = schedulerTaskRepository;
         this.taskResolver = taskResolver;
@@ -82,6 +91,7 @@ public class Scheduler implements SchedulerClient {
         this.deleteUnresolvedAfter = deleteUnresolvedAfter;
         this.shutdownMaxWait = shutdownMaxWait;
         this.onStartup = onStartup;
+        this.enableAsyncHandler = enableAsyncHandler;
         this.detectDeadWaiter = new Waiter(heartbeatInterval.multipliedBy(2), clock);
         this.heartbeatInterval = heartbeatInterval;
         this.heartbeatWaiter = new Waiter(heartbeatInterval, clock);
@@ -94,9 +104,9 @@ public class Scheduler implements SchedulerClient {
 
         if (pollingStrategyConfig.type == PollingStrategyConfig.Type.LOCK_AND_FETCH) {
             schedulerTaskRepository.checkSupportsLockAndFetch();
-            executeDueStrategy = new LockAndFetchCandidates(executor, schedulerTaskRepository, this, threadpoolSize, statsRegistry, schedulerState, failureLogger, taskResolver, clock, pollingStrategyConfig, this::triggerCheckForDueExecutions);
+            executeDueStrategy = new LockAndFetchCandidates(executor, schedulerTaskRepository, this, threadpoolSize, statsRegistry, schedulerState, failureLogger, taskResolver, clock, pollingStrategyConfig, this::triggerCheckForDueExecutions, enableAsyncHandler);
         } else if (pollingStrategyConfig.type == PollingStrategyConfig.Type.FETCH) {
-            executeDueStrategy = new FetchCandidates(executor, schedulerTaskRepository, this, threadpoolSize, statsRegistry, schedulerState, failureLogger, taskResolver, clock, pollingStrategyConfig, this::triggerCheckForDueExecutions);
+            executeDueStrategy = new FetchCandidates(executor, schedulerTaskRepository, this, threadpoolSize, statsRegistry, schedulerState, failureLogger, taskResolver, clock, pollingStrategyConfig, this::triggerCheckForDueExecutions, enableAsyncHandler);
         } else {
             throw new IllegalArgumentException("Unknown polling-strategy type: " + pollingStrategyConfig.type);
         }

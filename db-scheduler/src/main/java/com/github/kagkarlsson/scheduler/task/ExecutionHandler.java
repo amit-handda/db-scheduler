@@ -15,6 +15,12 @@
  */
 package com.github.kagkarlsson.scheduler.task;
 
+import java.util.concurrent.CompletableFuture;
+
 public interface ExecutionHandler<T> {
     CompletionHandler<T> execute(TaskInstance<T> taskInstance, ExecutionContext executionContext);
+
+    default CompletableFuture<CompletionHandler<T>> executeAsync(TaskInstance<T> taskInstance, ExecutionContext executionContext) {
+        return CompletableFuture.completedFuture(new CompletionHandler.OnCompleteRemove<>());
+    }
 }

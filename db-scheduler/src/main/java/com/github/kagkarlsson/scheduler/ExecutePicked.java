@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @SuppressWarnings("rawtypes")
 class ExecutePicked implements Runnable {
@@ -43,9 +44,11 @@ class ExecutePicked implements Runnable {
     private final Clock clock;
     private final Execution pickedExecution;
 
+    private final boolean enableAsyncHandler;
+
     public ExecutePicked(Executor executor, TaskRepository taskRepository, SchedulerClient schedulerClient, StatsRegistry statsRegistry,
                          TaskResolver taskResolver, SchedulerState schedulerState, ConfigurableLogger failureLogger,
-                         Clock clock, Execution pickedExecution) {
+                         Clock clock, Execution pickedExecution, boolean enableAsyncHandler) {
         this.executor = executor;
         this.taskRepository = taskRepository;
         this.schedulerClient = schedulerClient;
@@ -55,17 +58,22 @@ class ExecutePicked implements Runnable {
         this.failureLogger = failureLogger;
         this.clock = clock;
         this.pickedExecution = pickedExecution;
+        this.enableAsyncHandler = enableAsyncHandler;
     }
 
     @Override
     public void run() {
         // FIXLATER: need to cleanup all the references back to scheduler fields
         final UUID executionId = executor.addCurrentlyProcessing(new CurrentlyExecuting(pickedExecution, clock));
-        try {
-            statsRegistry.register(StatsRegistry.CandidateStatsEvent.EXECUTED);
-            executePickedExecution(pickedExecution);
-        } finally {
-            executor.removeCurrentlyProcessing(executionId);
+        statsRegistry.register(StatsRegistry.CandidateStatsEvent.EXECUTED);
+        if (enableAsyncHandler) {
+            executePickedExecutionAsync(pickedExecution).whenComplete((c, ex) -> executor.removeCurrentlyProcessing(executionId));
+        } else {
+            try {
+                executePickedExecution(pickedExecution);
+            } finally {
+                executor.removeCurrentlyProcessing(executionId);
+            }
         }
     }
 
@@ -94,6 +102,35 @@ class ExecutePicked implements Runnable {
             failure(task.get(), execution, unhandledError, executionStarted, "Error");
             statsRegistry.register(StatsRegistry.ExecutionStatsEvent.FAILED);
         }
+    }
+
+    private CompletableFuture<CompletionHandler> executePickedExecutionAsync(Execution execution) {
+        final Optional<Task> task = taskResolver.resolve(execution.taskInstance.getTaskName());
+        if (!task.isPresent()) {
+            LOG.error("Failed to find implementation for task with name '{}'. Should have been excluded in JdbcRepository.", execution.taskInstance.getTaskName());
+            statsRegistry.register(StatsRegistry.SchedulerStatsEvent.UNEXPECTED_ERROR);
+            return new CompletableFuture<>();
+        }
+
+        Instant executionStarted = clock.now();
+        LOG.debug("Executing " + execution);
+        CompletableFuture<CompletionHandler> completableFuture = task.get().executeAsync(execution.taskInstance, new ExecutionContext(schedulerState, execution, schedulerClient));
+
+        return completableFuture.whenCompleteAsync((completion, ex) -> {
+            if (ex != null) {
+                if (ex instanceof RuntimeException) {
+                    failure(task.get(), execution, ex, executionStarted, "Unhandled exception");
+                    statsRegistry.register(StatsRegistry.ExecutionStatsEvent.FAILED);
+                } else {
+                    failure(task.get(), execution, ex, executionStarted, "Error");
+                    statsRegistry.register(StatsRegistry.ExecutionStatsEvent.FAILED);
+                }
+                return;
+            }
+            LOG.debug("Execution done");
+            complete(completion, execution, executionStarted);
+            statsRegistry.register(StatsRegistry.ExecutionStatsEvent.COMPLETED);
+        }, executor.getExecutorService());
     }
 
     private void complete(CompletionHandler completion, Execution execution, Instant executionStarted) {

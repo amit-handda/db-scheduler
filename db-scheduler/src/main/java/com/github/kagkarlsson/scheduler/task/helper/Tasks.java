@@ -20,6 +20,7 @@ import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 public class Tasks {
@@ -266,6 +267,11 @@ public class Tasks {
                 @Override
                 public CompletionHandler<T> execute(TaskInstance<T> taskInstance, ExecutionContext executionContext) {
                     return executionHandler.execute(taskInstance, executionContext);
+                }
+
+                @Override
+                public CompletableFuture<CompletionHandler<T>> executeAsync(TaskInstance<T> taskInstance, ExecutionContext executionContext) {
+                    return executionHandler.executeAsync(taskInstance, executionContext);
                 }
             };
         }
