@@ -105,7 +105,7 @@ public class DeadExecutionsTest {
     }
 
     @Test
-    public void scheduler_should_detect_dead_execution_that_never_updated_heartbeat() {
+    public void scheduler_should_detect_dead_execution_that_never_updated_heartbeat() throws InterruptedException {
         final Instant now = Instant.now();
         settableClock.set(now.minus(Duration.ofHours(1)));
         final Instant oneHourAgo = settableClock.now();
@@ -128,6 +128,7 @@ public class DeadExecutionsTest {
         settableClock.set(Instant.now());
 
         scheduler.executeDue();
+        Thread.sleep(100);
         assertThat(nonCompletingExecutionHandler.timesExecuted.get(), is(2));
     }
 
